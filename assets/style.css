@@ -1,37 +1,58 @@
 .outer {
     width: 1200px;
 }
-  .toc { 
-    margin-left: 50px;
-    width: 200px;
-    position: fixed;
-  }
 
-  .wrapper {
-    width: 900px;
-    margin-left: 250px;
-    vertical-align:top;
-     -ms-word-break: break-all;
-    word-break: break-all;
+.toc {
+margin-left: 50px;
+width: 200px;
+position: fixed;
+}
 
- /* Non standard for webkit */
-     word-break: break-word;
+.article {
+    margin-bottom: 10px;
+    margin-bottom: 1000px;
+}
 
-    -webkit-hyphens: auto;
-       -moz-hyphens: auto;
-        -ms-hyphens: auto;
-            hyphens: auto;
-  }
-  /* .toc a { */
-  /* } */
-  /* .toc .toc-h2 { */
-  /*   padding-left: 10px */
-  /* } */
-  /* .toc .toc-h3 { */
-  /* } */
-  /* .toc-active { */
-  /*   font-weight: bold; */
-  /* } */
+.wrapper {
+width: 900px;
+margin-left: 250px;
+vertical-align:top;
+ -ms-word-break: break-all;
+word-break: break-all;
+
+/* Non standard for webkit */
+ word-break: break-word;
+
+-webkit-hyphens: auto;
+   -moz-hyphens: auto;
+    -ms-hyphens: auto;
+        hyphens: auto;
+}
+
+.toc ul {
+    list-style-type: none;
+}
+
+.toc a {
+    text-decoration: none;
+    display: block;
+}
+
+.toc .toc-h2 {
+}
+
+.toc .toc-h3 {
+    padding-left: 20px
+}
+
+.toc .toc-h4 {
+    padding-left: 30px
+}
+
+.toc-active {
+    font-weight: bold;
+}
+
 body {
     color: #222;
     background-color: white; /*#f8f8f8;*/
@@ -57,7 +78,7 @@ div#my-header a {
 }
 
 #middle {
-    /* Contains nav and content side-by-side. */ 
+    /* Contains nav and content side-by-side. */
     text-decoration:none;
 }
 
@@ -198,8 +219,8 @@ code {
     font-size: .8em;
     color: #ccc;
     text-align: center;
-    
-    
+
+
     bottom: 40px;
     height: 50px;
 /*width: 600px;*/
