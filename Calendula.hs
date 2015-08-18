@@ -2,9 +2,9 @@ import Data.List (isInfixOf)
 import Data.String.Utils (replace)
 import System.FilePath.Find (
     fileType, find, (==?), directory, (/=?), FileType(..), FindClause)
-import System.FilePath.Posix (makeRelative, takeDirectory, takeFileName)
-import System.Directory (getCurrentDirectory, copyFile)
-import System.Environment (getExecutablePath)
+import System.FilePath.Posix (makeRelative, takeDirectory, takeFileName) 
+import System.Directory (getCurrentDirectory, copyFile, createDirectoryIfMissing)
+import System.Environment (getExecutablePath, getArgs)
 import Text.Regex.Posix ((=~))
 import Text.Pandoc
 import Control.Monad (zipWithM_, forM_, forM)
@@ -60,12 +60,13 @@ wrapDiv :: String -> String
 wrapDiv x = "<div class=\"article\">" ++ x ++ "</div>"
 
 main = do
-    let targetDir = "/tmp/Calendula/"
+    args <- getArgs 
+    let targetDir = args !! 0
+    createDirectoryIfMissing True targetDir
     cwd <- getCurrentDirectory
     index <- buildIndex cwd
     let assets = ["style.css", "jquery.min.js", "toc.min.js"]
     assetsSrc <- forM (map ("assets/" ++) assets) getDataFileName 
-    putStrLn (show assetsSrc)
     let assetsDst = map (targetDir ++ ) assets
     let mediaSrc = filter isContent index 
     let mediaDst = map ((targetDir ++) . takeFileName) mediaSrc
