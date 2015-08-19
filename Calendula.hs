@@ -10,13 +10,6 @@ import Text.Pandoc
 import Control.Monad (zipWithM_, forM_, forM)
 import Paths_calendula
 
-htmlHeader = "<!DOCTYPE html><html><body><head><link rel=\"stylesheet\" \
-     \ type=\"text/css\" href=\"style.css\"></head><div class=\"outer\"> \
-     \ <div class=\"toc\"></div><div class=\"wrapper\">"
-
-htmlFooter = "</div></div><script src=\"jquery.min.js\"></script><script\
-   \ src=\"toc.min.js\"></script><script>$('.toc').toc({'selectors': 'h1,h2,h3,h4'});</script></body></html>"
-
 notGit :: FindClause Bool
 notGit = directory /=? ".git"
 
@@ -25,14 +18,14 @@ buildIndex :: FilePath -> IO [FilePath]
 buildIndex = find notGit (fileType ==? RegularFile)
 
 concatMarkdown :: FilePath -> [FilePath] -> IO ()
-concatMarkdown outFile files = do 
-        writeFile outFile htmlHeader
-        forM_ (filter isMDfile files) $ \infile -> do
-            contents <- readFile infile
-            level <- subLevel infile
-            appendFile outFile $ wrapDiv . markdownToHtml $ 
-                incHeaderLevel level contents
-        appendFile outFile htmlFooter
+concatMarkdown dst files = mapM_ (concatFile transform dst) $ filter isMDfile files
+    where transform x = wrapDiv . markdownToHtml . (incHeaderLevel x)
+
+concatFile :: (Int -> String -> String) -> FilePath -> FilePath -> IO ()
+concatFile parse dst src = do
+            contents <- readFile src
+            level <- subLevel src
+            appendFile dst $ parse level contents
 
 subLevel :: FilePath -> IO Int
 subLevel x = do
@@ -65,7 +58,7 @@ main = do
     createDirectoryIfMissing True targetDir
     cwd <- getCurrentDirectory
     index <- buildIndex cwd
-    let assets = ["style.css", "jquery.min.js", "toc.min.js"]
+    let assets = ["footer.html", "index.html", "style.css", "jquery.min.js", "toc.min.js"]
     assetsSrc <- forM (map ("assets/" ++) assets) getDataFileName 
     let assetsDst = map (targetDir ++ ) assets
     let mediaSrc = filter isContent index 
@@ -73,3 +66,4 @@ main = do
     zipWithM_ copyFile assetsSrc assetsDst
     zipWithM_ copyFile mediaSrc mediaDst
     concatMarkdown (targetDir ++ "index.html") index
+    concatFile (\ _ s -> s) (targetDir ++ "index.html") (targetDir ++ "footer.html")
