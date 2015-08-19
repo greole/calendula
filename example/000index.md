@@ -12,3 +12,5 @@ Some Code
 ~~~
 cat /dev/random
 ~~~
+
+$$  \phi_{\psi}=\frac{1}{\theta} $$
