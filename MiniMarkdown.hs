@@ -1,4 +1,4 @@
-module MiniMarkdown where 
+module MiniMarkdown where
 
 {-# LANGUAGE NoMonomorphismRestriction #-}
 import Text.ParserCombinators.Parsec (Parser)
@@ -12,32 +12,33 @@ data Token = Head (Int, String)
            | ICode String
            | BCode String
            | Url (String, String)
-           | List String 
+           | List String
            | Stuff String
            | Emptym
            deriving Show
 
 makeEmpty _ = Emptym
- 
+
 token2Html :: Token -> String
 token2Html (Bold x) = wrap "strong" x
 token2Html (Emph x) = wrap "em" x
 token2Html (Stuff x) = x
 token2Html (Head (l, x)) = wrap ("h" ++ show l) x
-token2Html (Url (l, x)) = "<a href=\"" ++ x ++ "\">" ++  l ++ "</a>" 
+token2Html (Url (l, x)) = "<a href=\"" ++ x ++ "\">" ++  l ++ "</a>"
+token2Html (List x) = wrap "li" x
 token2Html (ICode x) = wrap "code" x
-token2Html (BCode x) = wrapp "code" x
+token2Html (BCode x) = wrap "pre" $ wrap "code" x
 token2Html Emptym = ""
 
 wrapp a b = wrap "p" $ wrap a b
-wrap a b = "<" ++ a ++ ">" ++ b ++ "</" ++ a ++ ">" 
+wrap a b = "<" ++ a ++ ">" ++ b ++ "</" ++ a ++ ">"
 
 mhead :: Parser Token
 mhead = fmap Head $ liftA2 (,) numB cont
-    where numB = fmap length (many1 (char '#') <* spaces)
-          cont = many (noneOf "\n") <* char '\n'
+    where numB = fmap length (many (char '\n') *> many1 (char '#') <* spaces)
+          cont = many (noneOf "\n") <* lookAhead (char '\n')
 
-url :: Parser Token 
+url :: Parser Token
 url = fmap Url $ liftA2 (,) name url
         where  name = between open close cont
                     where open  = char '[' <* lookAhead (noneOf " *")
@@ -47,7 +48,7 @@ url = fmap Url $ liftA2 (,) name url
                     where open  = char '(' <* lookAhead (noneOf " *")
                           close = char ')'
                           cont  = many (noneOf "\n)")
-      
+
 emph :: Parser Token
 emph = fmap Emph $ between open close cont
         where cont = many (noneOf "\n*")
@@ -55,16 +56,22 @@ emph = fmap Emph $ between open close cont
               close = char '*'
 
 inlineCode :: Parser Token
-inlineCode = fmap ICode $ between open close cont
+inlineCode = fmap ICode $ between del del cont
         where cont = many (noneOf "`\n")
-              open = char '`'
-              close = char '`'
+              del = char '`'
 
 blockCode :: Parser Token
 blockCode = fmap BCode $ between open close cont
-        where cont = many (noneOf "~")
-              open = (count 3  (char '~')) <* char '\n'
-              close = (count 3  (char '~')) <* char '\n'
+        where cont = manyTill anyChar (try (lookAhead close))
+              open = (count 3 (char '~')) <* char '\n'
+              close = (count 3 (char '~')) <* char '\n'
+
+blockCode2 :: Parser Token
+blockCode2 = fmap BCode $ between open close cont
+        where cont = manyTill anyChar (try (lookAhead close))
+              open = string "\n" <* lookAhead (try (string "   ") <|>
+                                               try (string "\t"))
+              close = string "\n\n"
 
 bold :: Parser Token
 bold = fmap Bold $ between open close cont
@@ -84,24 +91,25 @@ mempty =  fmap makeEmpty $ string "EOF"
 stuff :: Parser Token
 stuff = fmap Stuff $ manyTill contd newToken
         where newToken = lookAhead (choice (map try [emph, bold, list, url,
-                                     mhead ,inlineCode, blockCode, mempty]))
+                                     mhead, inlineCode, blockCode, blockCode2,
+                                     mempty]))
               contd = anyChar
 
 parseMarkdownTokens :: Parser [Token]
 parseMarkdownTokens = many $ choice [try url, try emph, try bold,
-                                    try mhead, try inlineCode,  
-                                    try blockCode,
+                                    try mhead, try inlineCode,
+                                    try blockCode, try list, try blockCode2,
                                     try mempty, stuff]
 
 parseMarkdown :: String -> Either ParseError [Token]
 parseMarkdown inp = parse parseMarkdownTokens "(unknown)" inp
 
-parse2HTML inp = do 
+parse2HTML inp = do
     res <- parseMarkdown inp
-    let res' = concat $ map token2Html res 
+    let res' = concat $ map token2Html res
     return res'
 
 writeHTMLString :: String -> String
 writeHTMLString inp = stripEither $ parse2HTML (inp ++ "EOF")
     where stripEither (Right x) = x
-          stripEither (Left x) = show x 
+          stripEither (Left x) = show x
