@@ -6,9 +6,9 @@ import System.FilePath.Posix (makeRelative, takeDirectory, takeFileName)
 import System.Directory (getCurrentDirectory, copyFile, createDirectoryIfMissing)
 import System.Environment (getExecutablePath, getArgs)
 import Text.Regex.Posix ((=~))
-import Text.Pandoc
 import Control.Monad (zipWithM_, forM_, forM)
 import Paths_calendula
+import MiniMarkdown
 
 notGit :: FindClause Bool
 notGit = directory /=? ".git"
@@ -19,7 +19,7 @@ buildIndex = find notGit (fileType ==? RegularFile)
 
 concatMarkdown :: FilePath -> [FilePath] -> IO ()
 concatMarkdown dst files = mapM_ (concatFile transform dst) $ filter isMDfile files
-    where transform x = wrapDiv . markdownToHtml . (incHeaderLevel x)
+    where transform x = wrapDiv . writeHTMLString . (incHeaderLevel x)
 
 concatFile :: (Int -> String -> String) -> FilePath -> FilePath -> IO ()
 concatFile parse dst src = do
@@ -45,9 +45,6 @@ isMDfile = (=~ ".md")
 
 isContent :: String -> Bool
 isContent = not . (=~ ".md|.html")
-
-markdownToHtml :: String -> String
-markdownToHtml = (writeHtmlString def {writerReferenceLinks = True}) . readMarkdown def
 
 wrapDiv :: String -> String
 wrapDiv x = "<div class=\"article\">" ++ x ++ "</div>"
