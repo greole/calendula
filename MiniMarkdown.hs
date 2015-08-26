@@ -13,7 +13,7 @@ data Token = Head (Int, String)
            | ICode String
            | BCode String
            | Url (String, String)
-           | List String
+           | List [Token]
            | Stuff String
            | Emptym
 
@@ -44,7 +44,7 @@ instance Show Token where
     show (Stuff x) = x ++ " "
     show (Head (l, x)) = wrap ("h" ++ show l) (namedWrap "a" "name" x x)
     show (Url (l, x)) = href l x
-    show (List x) = wrap "ul" $ wrap "li" x
+    show (List x) = wrap "ul" $ wrap "li" $ concat $ map show x
     show (ICode x) = wrap "code" x
     show (BCode x) = wrap "pre" $ wrap "code" x
     show (Par xs) = wrap "p" $ concat $ map show xs
@@ -70,7 +70,7 @@ mhead = fmap Head $ liftA2 (,) numB cont
           cont = many (noneOf "\n") <* lookAhead nl
 
 list :: Parser Token
-list = fmap List $ optionalEOL *> (between open close anyTillEndBlock)
+list = fmap List $ optionalEOL *> (between open close parseMarkdownInline)
             where open = (oneOf "*-+") <* space
                   close = endBlock
 
@@ -162,13 +162,6 @@ tochead = do
     subtocs <- getsubtocs stopdescent
     optional (many tocEL)
     return (TocHead (num, cont) subtocs)
-    -- wenn erfolgreich dann steigt es immer ein level herab
-    -- nextElm <- case of
-    --   onlyNewLines -> subtocs []
-    --   isLowerLevel -> subtocs []
-    --   ishigherLevel get subtocs <- many tochheads
-    -- subtocs <- getsubtocs start
-    --(lookAhead (try (isLevel start)) <|> try onlyNewlines)
 
 getsubtocs :: Bool -> Parser [Toc]
 getsubtocs False = many (try tochead)
