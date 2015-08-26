@@ -15,6 +15,8 @@ data Token = Head (Int, String)
            | Url (String, String)
            | List [Token]
            | Stuff String
+           | Blockquote [Token]
+           | Hrule
            | Emptym
 
 data Toc = TocHead (Int, String) [Toc]
@@ -48,6 +50,7 @@ instance Show Token where
     show (ICode x) = wrap "code" x
     show (BCode x) = wrap "pre" $ wrap "code" x
     show (Par xs) = wrap "p" $ concat $ map show xs
+    show Hrule  = "<hr />"
     show Emptym = ""
 
 type HTML = String
@@ -62,7 +65,7 @@ href a b  =  namedWrap "a" "href" a b
 {- Block Parsers -}
 
 parseMarkdownBlocks :: Parser [Token]
-parseMarkdownBlocks = many $ choice (map try [mhead, list, bcode, par])
+parseMarkdownBlocks = many $ choice (map try [mhead, hrule, list, bcode, par])
 
 mhead :: Parser Token
 mhead = fmap Head $ liftA2 (,) numB cont
@@ -73,6 +76,13 @@ list :: Parser Token
 list = fmap List $ optionalEOL *> (between open close parseMarkdownInline)
             where open = (oneOf "*-+") <* space
                   close = endBlock
+
+hrule :: Parser Token
+hrule = do
+    optionalEOL
+    string "---" <|> (string "___")
+    many (oneOf "-_") <* (char '\n')
+    return Hrule
 
 bcode :: Parser Token
 bcode =  fmap BCode (blockCode <|> blockCode2)
