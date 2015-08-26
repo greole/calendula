@@ -13,7 +13,7 @@ data Token = Head (Int, String)
            | BCode String
            | Url (String, String)
            | List [Token]
-           | Stuff String
+           | MString String
            | Blockquote [Token]
            | Hrule
            | EndPar
@@ -22,7 +22,7 @@ data Token = Head (Int, String)
 instance Show Token where
     show (Bold x) = wrap "strong" x
     show (Emph x) = wrap "em" x
-    show (Stuff x) = x ++ " "
+    show (MString x) = x ++ " "
     show (Head (l, x)) = wrap ("h" ++ show l) (namedWrap "a" "name" x x)
     show (Url (l, x)) = href x l
     show (List x) = wrap "ul" $ wrap "li" $ concat $ map show x
@@ -38,48 +38,50 @@ type Markdown = String
 
 makeEmpty _ = Emptym
 
-wrap a b = "<" ++ a ++ ">" ++ b ++ "</" ++ a ++ ">"
-namedWrap a b c d  = "<" ++ a ++ " " ++ b ++ "=\"" ++ c ++ "\">" ++ d ++ "</" ++ a ++ ">"
+wrap a b = concat ["<",a,">",b,"</",a,">"]
+namedWrap a b c d  = concat ["<", a," ",b,"=\"",c,"\">",d,"</",a,">"]
 href a b  =  namedWrap "a" "href" a b
 
 {- Block Parsers -}
 
 parseMarkdownBlocks :: Parser [Token]
-parseMarkdownBlocks = many $ choice (map try [mhead, hrule, list, bcode, par, endBlock, swl])
+parseMarkdownBlocks = many $ choice (map try bParser)
+    where bParser = [headl,hrule,list,bcode,par,endBlock,swl]
 
-mhead :: Parser Token
-mhead = fmap Head $ liftA2 (,) numB cont
+headl :: Parser Token
+headl = Head <$> liftA2 (,) numB cont
     where numB = fmap length (many1 (char '#') <* spaces)
           cont = many (noneOf "\n") <* nl
 
 list :: Parser Token
-list = fmap List $ between open close parseMarkdownInline
+list = List <$> between open close parseMarkdownInline
             where open = (oneOf "*-+") <* space
-                  close =lookAhead $ try endBlock
+                  close = lookAhead $ try endBlock
 
 hrule :: Parser Token
-hrule = do
-    string "---" <|> (string "___")
-    many (oneOf "-_") <* (char '\n')
-    return Hrule
+hrule = rule '*' <|> rule '-' <|> rule '_'
+    where rule x = do
+                count 3 (char x)
+                many (char x) <* (char '\n')
+                return Hrule
 
 bcode :: Parser Token
 bcode =  fmap BCode (blockCode <|> blockCode2)
 
 blockCode = between del del (anyTill del)
-        where  del = (count 3 (char '~')) <* nl
+        where del = (count 3 (char '~')) <* nl
 
 blockCode2 :: Parser String
 blockCode2 = between open close (anyTill close)
             where open = lookAhead (try (string "    ") <|> try (string "\t"))
-                  close = do 
-                        try endBlock 
+                  close = do
+                        try endBlock
                         (notFollowedBy (string "    ") <|> notFollowedBy (string "\t"))
                         return " "
 
-par = fmap Par $ parseMarkdownInline <* try endBlock
+par = Par <$> parseMarkdownInline <* try endBlock
 
-endBlock = do 
+endBlock = do
     string "\n\n"
     many (char '\n')
     return EndPar
@@ -102,7 +104,7 @@ parseMarkdownInline = many1 (markdownInline <|> mstring)
 markdownInline = choice (map try [url, emph, bold, iCode])
 
 url :: Parser Token
-url = fmap Url $ liftA2 (,) name url
+url = Url <$> liftA2 (,) name url
         where  name = between open close $ delChar "]"
                     where open  = char '[' <* lookAhead (noneOf " *")
                           close = char ']'
@@ -113,20 +115,20 @@ url = fmap Url $ liftA2 (,) name url
 delChar x = many (noneOf ("\n" ++ x))
 
 emph :: Parser Token
-emph = fmap Emph $ between open del $ delChar "*"
+emph = Emph <$> (between open del $ delChar "*")
         where open = del <* lookAhead (noneOf " *")
               del = char '*'
 
-iCode = fmap ICode $ between del del $ delChar "`"
+iCode = ICode <$> (between del del $ delChar "`")
          where del = char '`'
 
 bold :: Parser Token
-bold = fmap Bold $ between open del $ delChar "*"
+bold = Bold <$> (between open del $ delChar "*")
             where open = del <* notFollowedBy space
                   del = count 2 $ char '*'
 
 mstring :: Parser Token
-mstring = fmap Stuff $ many1Till (noneOf "\n") newToken
+mstring = MString <$> many1Till (noneOf "\n") newToken
         where newToken = lookAhead markdownInline <|> lookAhead eol
 
 many1Till p end = do
