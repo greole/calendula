@@ -8,6 +8,7 @@ import Text.Regex.Posix ((=~))
 import Control.Monad (zipWithM_, forM_, forM)
 import Paths_calendula
 import MiniMarkdown
+import Tocify
 
 notGit :: FindClause Bool
 notGit = directory /=? ".git"

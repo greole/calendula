@@ -3,7 +3,6 @@ module MiniMarkdown where
 {-# LANGUAGE NoMonomorphismRestriction #-}
 import Text.ParserCombinators.Parsec (Parser)
 import Text.Parsec
-import Text.Regex.Posix ((=~))
 import Control.Applicative (pure, liftA2, (*>),(<*),(<*>),(<$>))
 
 data Token = Head (Int, String)
@@ -20,33 +19,12 @@ data Token = Head (Int, String)
            | EndPar
            | Emptym
 
-data Toc = TocHead (Int, String) [Toc]
-         | EmptyToc
-
-makeEmptyToc _ = EmptyToc
-makeEmptyTocs _ = [EmptyToc]
-
-instance Show Toc where
-    show (TocHead (l, x) toc) =
-               namedWrap "div" "class" ("topwrapper" ++ (show l)) $
-               namedWrap "div" "class" "cnt" (href ("#"++x) x) ++ (subTocs l $ filtered toc)
-                  where filtered x = filter (/= EmptyToc) x
-                        subTocs l s
-                            | length s >= 1 = namedWrap "ul" "class" ("subtocs" ++ show l)$
-                                              unlines (map ((wrap "li") . show) s)
-                            | otherwise = ""
-    show (EmptyToc) = ""
-
-instance Eq Toc where
-    (==) EmptyToc EmptyToc = True
-    (==) _ _ = False
-
 instance Show Token where
     show (Bold x) = wrap "strong" x
     show (Emph x) = wrap "em" x
     show (Stuff x) = x ++ " "
     show (Head (l, x)) = wrap ("h" ++ show l) (namedWrap "a" "name" x x)
-    show (Url (l, x)) = href l x
+    show (Url (l, x)) = href x l
     show (List x) = wrap "ul" $ wrap "li" $ concat $ map show x
     show (ICode x) = wrap "code" x
     show (BCode x) = wrap "pre" $ wrap "code" x
@@ -172,48 +150,3 @@ writeHTMLString inp = stripEither $ parse2HTML (inp ++ "\n\n")
 
 stripEither (Right x) = x
 stripEither (Left x) = show x
-
-tochead :: Parser Toc
-tochead = do
-    many tocEL
-    start <- many1 (char '#')
-    let num = length start
-    spaces
-    cont <- many (noneOf "\n")
-    stopdescent <- (lookAhead (try (isLevel num))) <|> try onlyNewlines <|> pure False
-    subtocs <- getsubtocs stopdescent
-    optional (many tocEL)
-    return (TocHead (num, cont) subtocs)
-
-getsubtocs :: Bool -> Parser [Toc]
-getsubtocs False = many (try tochead)
-getsubtocs True = pure []
-
-isLevel start = do
-    optional (many (noneOf "#"))
-    string (replicate start '#')
-    spaces
-    many1 alphaNum
-    return True
-
-onlyNewlines :: Parser Bool
-onlyNewlines = do
-    skipMany newline
-    notFollowedBy anyToken
-    return True
-
-tocEL :: Parser Toc
-tocEL = do
-    many (noneOf "#\n") <* char '\n'
-    return EmptyToc
-
-parseMarkdownTOC :: String -> Either ParseError [Toc]
-parseMarkdownTOC inp = parse (many tochead) "(unknown)" inp
-
-parseTOC2HTML inp = do
-    res <- parseMarkdownTOC inp
-    let res' = concat $ map show res
-    return res'
-
-tocify :: Markdown -> HTML
-tocify inp = stripEither $ parseTOC2HTML (inp ++ "\n\n")
