@@ -17,6 +17,7 @@ data Token = Head (Int, String)
            | Stuff String
            | Blockquote [Token]
            | Hrule
+           | EndPar
            | Emptym
 
 data Toc = TocHead (Int, String) [Toc]
@@ -51,6 +52,7 @@ instance Show Token where
     show (BCode x) = wrap "pre" $ wrap "code" x
     show (Par xs) = wrap "p" $ concat $ map show xs
     show Hrule  = "<hr />"
+    show EndPar = ""
     show Emptym = ""
 
 type HTML = String
@@ -65,21 +67,20 @@ href a b  =  namedWrap "a" "href" a b
 {- Block Parsers -}
 
 parseMarkdownBlocks :: Parser [Token]
-parseMarkdownBlocks = many $ choice (map try [mhead, hrule, list, bcode, par])
+parseMarkdownBlocks = many $ choice (map try [mhead, hrule, list, bcode, par, endBlock, swl])
 
 mhead :: Parser Token
 mhead = fmap Head $ liftA2 (,) numB cont
-    where numB = fmap length (optionalEOL *> many1 (char '#') <* spaces)
-          cont = many (noneOf "\n") <* lookAhead nl
+    where numB = fmap length (many1 (char '#') <* spaces)
+          cont = many (noneOf "\n") <* nl
 
 list :: Parser Token
-list = fmap List $ optionalEOL *> (between open close parseMarkdownInline)
+list = fmap List $ between open close parseMarkdownInline
             where open = (oneOf "*-+") <* space
-                  close = endBlock
+                  close =lookAhead $ try endBlock
 
 hrule :: Parser Token
 hrule = do
-    optionalEOL
     string "---" <|> (string "___")
     many (oneOf "-_") <* (char '\n')
     return Hrule
@@ -87,20 +88,31 @@ hrule = do
 bcode :: Parser Token
 bcode =  fmap BCode (blockCode <|> blockCode2)
 
-blockCode = optionalEOL *> (between del del (anyTill del))
+blockCode = between del del (anyTill del)
         where  del = (count 3 (char '~')) <* nl
 
-blockCode2 = between open close anyTillEndBlock
-            where open = optionalEOL *> (lookAhead (try (string "    ") <|> try (string "\t")))
-                  close = endBlock
+blockCode2 :: Parser String
+blockCode2 = between open close (anyTill close)
+            where open = lookAhead (try (string "    ") <|> try (string "\t"))
+                  close = do 
+                        try endBlock 
+                        (notFollowedBy (string "    ") <|> notFollowedBy (string "\t"))
+                        return " "
+
+par = fmap Par $ parseMarkdownInline <* try endBlock
+
+endBlock = do 
+    string "\n\n"
+    many (char '\n')
+    return EndPar
+
+swl = do
+    string "\n"
+    return EndPar
 
 anyTillEndBlock = anyTill endBlock
-anyTill close = many1Till anyChar $ try $ lookAhead close
-
-par = fmap Par $ optionalEOL *> parseMarkdownInline <* endBlock
-
+anyTill close = many1Till anyChar $ lookAhead $ try $ close
 optionalEOL = optional (many nl)
-endBlock = fmap makeEmpty (string "\n")
 eol = fmap makeEmpty nl
 nl = (char '\n')
 
@@ -137,7 +149,7 @@ bold = fmap Bold $ between open del $ delChar "*"
 
 mstring :: Parser Token
 mstring = fmap Stuff $ many1Till (noneOf "\n") newToken
-        where newToken = lookAhead markdownInline <|> eol
+        where newToken = lookAhead markdownInline <|> lookAhead eol
 
 many1Till p end = do
     notFollowedBy end

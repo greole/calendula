@@ -64,7 +64,7 @@ isContent :: String -> Bool
 isContent = not . (=~ ".md|.html")
 
 wrapDiv :: String -> String
-wrapDiv x = "<div class=\"article\">\n\n" ++ x ++ "\n</div>"
+wrapDiv x = "<div class=\"article\">\n\n\n" ++ x ++ "\n\n</div>\n\n"
 
 main = do
     args <- getArgs
