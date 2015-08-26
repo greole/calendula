@@ -24,7 +24,7 @@ makeEmptyToc _ = EmptyToc
 makeEmptyTocs _ = [EmptyToc]
 
 instance Show Toc where
-    show (TocHead (l, x) toc) = 
+    show (TocHead (l, x) toc) =
                namedWrap "div" "class" ("topwrapper" ++ (show l)) $
                namedWrap "div" "class" "cnt" (href ("#"++x) x) ++ (subTocs l $ filtered toc)
                   where filtered x = filter (/= EmptyToc) x
@@ -32,19 +32,19 @@ instance Show Toc where
                             | length s >= 1 = namedWrap "ul" "class" ("subtocs" ++ show l)$
                                               unlines (map ((wrap "li") . show) s)
                             | otherwise = ""
-    show (EmptyToc) = "" 
+    show (EmptyToc) = ""
 
 instance Eq Toc where
     (==) EmptyToc EmptyToc = True
     (==) _ _ = False
 
 instance Show Token where
-    show (Bold x) = wrap "strong" x 
+    show (Bold x) = wrap "strong" x
     show (Emph x) = wrap "em" x
     show (Stuff x) = x ++ " "
     show (Head (l, x)) = wrap ("h" ++ show l) (namedWrap "a" "name" x x)
-    show (Url (l, x)) = href l x 
-    show (List x) = wrap "li" x
+    show (Url (l, x)) = href l x
+    show (List x) = wrap "ul" $ wrap "li" x
     show (ICode x) = wrap "code" x
     show (BCode x) = wrap "pre" $ wrap "code" x
     show (Par xs) = wrap "p" $ concat $ map show xs
@@ -62,7 +62,7 @@ href a b  =  namedWrap "a" "href" a b
 {- Block Parsers -}
 
 parseMarkdownBlocks :: Parser [Token]
-parseMarkdownBlocks = many $ choice (map try [mhead, bcode, par])
+parseMarkdownBlocks = many $ choice (map try [mhead, list, bcode, par])
 
 mhead :: Parser Token
 mhead = fmap Head $ liftA2 (,) numB cont
@@ -70,22 +70,22 @@ mhead = fmap Head $ liftA2 (,) numB cont
           cont = many (noneOf "\n") <* lookAhead nl
 
 list :: Parser Token
-list = fmap List $ optionalEOL *> (between open close $ many (noneOf "\n"))
+list = fmap List $ optionalEOL *> (between open close anyTillEndBlock)
             where open = (oneOf "*-+") <* space
                   close = endBlock
 
 bcode :: Parser Token
 bcode =  fmap BCode (blockCode <|> blockCode2)
 
-blockCode = optionalEOL *> (between open close cont)
-        where cont = many1Till anyChar (try (lookAhead close))
-              open = (count 3 (char '~')) <* nl
-              close = (count 3 (char '~')) <* nl
+blockCode = optionalEOL *> (between del del (anyTill del))
+        where  del = (count 3 (char '~')) <* nl
 
-blockCode2 = between open close cont
-            where cont = many1Till anyChar (try (lookAhead close))
-                  open = optionalEOL *> (lookAhead (try (string "    ") <|> try (string "\t")))
+blockCode2 = between open close anyTillEndBlock
+            where open = optionalEOL *> (lookAhead (try (string "    ") <|> try (string "\t")))
                   close = endBlock
+
+anyTillEndBlock = anyTill endBlock
+anyTill close = many1Till anyChar $ try $ lookAhead close
 
 par = fmap Par $ optionalEOL *> parseMarkdownInline <* endBlock
 
@@ -106,7 +106,7 @@ url = fmap Url $ liftA2 (,) name url
         where  name = between open close $ delChar "]"
                     where open  = char '[' <* lookAhead (noneOf " *")
                           close = char ']'
-               url = between open close $ delChar ")" 
+               url = between open close $ delChar ")"
                     where open  = char '(' <* lookAhead (noneOf " *")
                           close = char ')'
 
@@ -126,7 +126,7 @@ bold = fmap Bold $ between open del $ delChar "*"
                   del = count 2 $ char '*'
 
 mstring :: Parser Token
-mstring = fmap Stuff $ many1Till (noneOf "\n") newToken 
+mstring = fmap Stuff $ many1Till (noneOf "\n") newToken
         where newToken = lookAhead markdownInline <|> eol
 
 many1Till p end = do
@@ -179,23 +179,23 @@ isLevel start = do
     string (replicate start '#')
     spaces
     many1 alphaNum
-    return True 
+    return True
 
 onlyNewlines :: Parser Bool
-onlyNewlines = do 
+onlyNewlines = do
     skipMany newline
     notFollowedBy anyToken
     return True
 
 tocEL :: Parser Toc
 tocEL = do
-    many (noneOf "#\n") <* char '\n' 
+    many (noneOf "#\n") <* char '\n'
     return EmptyToc
 
 parseMarkdownTOC :: String -> Either ParseError [Toc]
 parseMarkdownTOC inp = parse (many tochead) "(unknown)" inp
 
-parseTOC2HTML inp = do 
+parseTOC2HTML inp = do
     res <- parseMarkdownTOC inp
     let res' = concat $ map show res
     return res'
