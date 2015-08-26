@@ -18,9 +18,27 @@ buildIndex :: FilePath -> IO [FilePath]
 buildIndex = find notGit (fileType ==? RegularFile)
 
 concatMarkdown :: FilePath -> [FilePath] -> IO ()
-concatMarkdown dst files = mapM_ (concatFile transform dst) $ filter isMDfile files
-    where transform x = wrapDiv . writeHTMLString . (incHeaderLevel x)
+concatMarkdown dst files = do
+            let filesmd = filter isMDfile files
+            levels <- mapM subLevel filesmd
+            markdown <- mapM readFile filesmd 
+            let sanMarkdown = wrapDiv . filterMarkdownHeader
+            let mergedMarkdown = mergeMarkdown incHeaderLevel sanMarkdown levels markdown
+            let cnt = wrapDiv . writeHTMLString $ mergedMarkdown
+            let toc = tocify $ mergedMarkdown
+            appendFile dst (toc ++ "</div> <div class=wrapper>")
+            appendFile dst cnt
 
+mergeMarkdown :: (Int -> Markdown -> HTML) ->  (Markdown -> Markdown) -> [Int] -> [Markdown] -> Markdown
+mergeMarkdown p f l x = unlines $ zipWith p l (map f x) 
+
+filterMarkdownHeader :: Markdown -> Markdown
+filterMarkdownHeader a = unlines $ dropWhile isHeader (lines a)
+               where isHeader (x:xs)
+                        | x == '%' = True
+                        | otherwise = False 
+                     isHeader _ = False
+ 
 concatFile :: (Int -> String -> String) -> FilePath -> FilePath -> IO ()
 concatFile parse dst src = do
             contents <- readFile src
@@ -47,7 +65,7 @@ isContent :: String -> Bool
 isContent = not . (=~ ".md|.html")
 
 wrapDiv :: String -> String
-wrapDiv x = "<div class=\"article\">" ++ x ++ "</div>"
+wrapDiv x = "<div class=\"article\">\n\n" ++ x ++ "\n</div>"
 
 main = do
     args <- getArgs 

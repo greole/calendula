@@ -4,9 +4,10 @@ module MiniMarkdown where
 import Text.ParserCombinators.Parsec (Parser)
 import Text.Parsec
 import Text.Regex.Posix ((=~))
-import Control.Applicative (liftA2, (*>),(<*),(<*>),(<$>))
+import Control.Applicative (pure, liftA2, (*>),(<*),(<*>),(<$>))
 
 data Token = Head (Int, String)
+           | Par [Token]
            | Bold String
            | Emph String
            | ICode String
@@ -15,101 +16,189 @@ data Token = Head (Int, String)
            | List String
            | Stuff String
            | Emptym
-           deriving Show
+
+data Toc = TocHead (Int, String) [Toc]
+         | EmptyToc
+
+makeEmptyToc _ = EmptyToc
+makeEmptyTocs _ = [EmptyToc]
+
+instance Show Toc where
+    show (TocHead (l, x) toc) = 
+               namedWrap "div" "class" ("topwrapper" ++ (show l)) $
+               namedWrap "div" "class" "cnt" (href ("#"++x) x) ++ (subTocs l $ filtered toc)
+                  where filtered x = filter (/= EmptyToc) x
+                        subTocs l s
+                            | length s >= 1 = namedWrap "ul" "class" ("subtocs" ++ show l)$
+                                              unlines (map ((wrap "li") . show) s)
+                            | otherwise = ""
+    show (EmptyToc) = "" 
+
+instance Eq Toc where
+    (==) EmptyToc EmptyToc = True
+    (==) _ _ = False
+
+instance Show Token where
+    show (Bold x) = wrap "strong" x 
+    show (Emph x) = wrap "em" x
+    show (Stuff x) = x ++ " "
+    show (Head (l, x)) = wrap ("h" ++ show l) (namedWrap "a" "name" x x)
+    show (Url (l, x)) = href l x 
+    show (List x) = wrap "li" x
+    show (ICode x) = wrap "code" x
+    show (BCode x) = wrap "pre" $ wrap "code" x
+    show (Par xs) = wrap "p" $ concat $ map show xs
+    show Emptym = ""
+
+type HTML = String
+type Markdown = String
 
 makeEmpty _ = Emptym
 
-token2Html :: Token -> String
-token2Html (Bold x) = wrap "strong" x
-token2Html (Emph x) = wrap "em" x
-token2Html (Stuff x) = x
-token2Html (Head (l, x)) = wrap ("h" ++ show l) x
-token2Html (Url (l, x)) = "<a href=\"" ++ x ++ "\">" ++  l ++ "</a>"
-token2Html (List x) = wrap "li" x
-token2Html (ICode x) = wrap "code" x
-token2Html (BCode x) = wrap "pre" $ wrap "code" x
-token2Html Emptym = ""
-
-wrapp a b = wrap "p" $ wrap a b
 wrap a b = "<" ++ a ++ ">" ++ b ++ "</" ++ a ++ ">"
+namedWrap a b c d  = "<" ++ a ++ " " ++ b ++ "=\"" ++ c ++ "\">" ++ d ++ "</" ++ a ++ ">"
+href a b  =  namedWrap "a" "href" a b
+
+{- Block Parsers -}
+
+parseMarkdownBlocks :: Parser [Token]
+parseMarkdownBlocks = many $ choice (map try [mhead, bcode, par])
 
 mhead :: Parser Token
 mhead = fmap Head $ liftA2 (,) numB cont
-    where numB = fmap length (many (char '\n') *> many1 (char '#') <* spaces)
-          cont = many (noneOf "\n") <* lookAhead (char '\n')
+    where numB = fmap length (optionalEOL *> many1 (char '#') <* spaces)
+          cont = many (noneOf "\n") <* lookAhead nl
+
+list :: Parser Token
+list = fmap List $ optionalEOL *> (between open close $ many (noneOf "\n"))
+            where open = (oneOf "*-+") <* space
+                  close = endBlock
+
+bcode :: Parser Token
+bcode =  fmap BCode (blockCode <|> blockCode2)
+
+blockCode = optionalEOL *> (between open close cont)
+        where cont = many1Till anyChar (try (lookAhead close))
+              open = (count 3 (char '~')) <* nl
+              close = (count 3 (char '~')) <* nl
+
+blockCode2 = between open close cont
+            where cont = many1Till anyChar (try (lookAhead close))
+                  open = optionalEOL *> (lookAhead (try (string "    ") <|> try (string "\t")))
+                  close = endBlock
+
+par = fmap Par $ optionalEOL *> parseMarkdownInline <* endBlock
+
+optionalEOL = optional (many nl)
+endBlock = fmap makeEmpty (string "\n")
+eol = fmap makeEmpty nl
+nl = (char '\n')
+
+{- Inline Parser -}
+
+parseMarkdownInline :: Parser [Token]
+parseMarkdownInline = many1 (markdownInline <|> mstring)
+
+markdownInline = choice (map try [url, emph, bold, iCode])
 
 url :: Parser Token
 url = fmap Url $ liftA2 (,) name url
-        where  name = between open close cont
+        where  name = between open close $ delChar "]"
                     where open  = char '[' <* lookAhead (noneOf " *")
                           close = char ']'
-                          cont  = many (noneOf "\n]")
-               url = between open close cont
+               url = between open close $ delChar ")" 
                     where open  = char '(' <* lookAhead (noneOf " *")
                           close = char ')'
-                          cont  = many (noneOf "\n)")
+
+delChar x = many (noneOf ("\n" ++ x))
 
 emph :: Parser Token
-emph = fmap Emph $ between open close cont
-        where cont = many (noneOf "\n*")
-              open = char '*' <* lookAhead (noneOf " *")
-              close = char '*'
+emph = fmap Emph $ between open del $ delChar "*"
+        where open = del <* lookAhead (noneOf " *")
+              del = char '*'
 
-inlineCode :: Parser Token
-inlineCode = fmap ICode $ between del del cont
-        where cont = many (noneOf "`\n")
-              del = char '`'
-
-blockCode :: Parser Token
-blockCode = fmap BCode $ between open close cont
-        where cont = manyTill anyChar (try (lookAhead close))
-              open = (count 3 (char '~')) <* char '\n'
-              close = (count 3 (char '~')) <* char '\n'
-
-blockCode2 :: Parser Token
-blockCode2 = fmap BCode $ between open close cont
-        where cont = manyTill anyChar (try (lookAhead close))
-              open = string "\n" <* lookAhead (try (string "   ") <|>
-                                               try (string "\t"))
-              close = string "\n\n"
+iCode = fmap ICode $ between del del $ delChar "`"
+         where del = char '`'
 
 bold :: Parser Token
-bold = fmap Bold $ between open close cont
-        where cont = many (noneOf "\n*")
-              open = count 2 $ char '*' <* notFollowedBy space
-              close = count 2 $ char '*'
+bold = fmap Bold $ between open del $ delChar "*"
+            where open = del <* notFollowedBy space
+                  del = count 2 $ char '*'
 
-list :: Parser Token
-list =  fmap List $ between open close cont
-        where cont = many (noneOf "\n")
-              open = (oneOf "*-+") <* space
-              close = char '\n'
+mstring :: Parser Token
+mstring = fmap Stuff $ many1Till (noneOf "\n") newToken 
+        where newToken = lookAhead markdownInline <|> eol
 
-mempty :: Parser Token
-mempty =  fmap makeEmpty $ string "EOF"
+many1Till p end = do
+    notFollowedBy end
+    p1 <- p
+    ps <- manyTill p end
+    return (p1:ps)
 
-stuff :: Parser Token
-stuff = fmap Stuff $ manyTill contd newToken
-        where newToken = lookAhead (choice (map try [emph, bold, list, url,
-                                     mhead, inlineCode, blockCode, blockCode2,
-                                     mempty]))
-              contd = anyChar
-
-parseMarkdownTokens :: Parser [Token]
-parseMarkdownTokens = many $ choice [try url, try emph, try bold,
-                                    try mhead, try inlineCode,
-                                    try blockCode, try list, try blockCode2,
-                                    try mempty, stuff]
+{- Parser -}
 
 parseMarkdown :: String -> Either ParseError [Token]
-parseMarkdown inp = parse parseMarkdownTokens "(unknown)" inp
+parseMarkdown inp = parse parseMarkdownBlocks "(unknown)" inp
 
 parse2HTML inp = do
     res <- parseMarkdown inp
-    let res' = concat $ map token2Html res
+    let res' = concat $ map show res
     return res'
 
-writeHTMLString :: String -> String
-writeHTMLString inp = stripEither $ parse2HTML (inp ++ "EOF")
-    where stripEither (Right x) = x
-          stripEither (Left x) = show x
+writeHTMLString :: Markdown -> HTML
+writeHTMLString inp = stripEither $ parse2HTML (inp ++ "\n\n")
+
+stripEither (Right x) = x
+stripEither (Left x) = show x
+
+tochead :: Parser Toc
+tochead = do
+    many tocEL
+    start <- many1 (char '#')
+    let num = length start
+    spaces
+    cont <- many (noneOf "\n")
+    stopdescent <- (lookAhead (try (isLevel num))) <|> try onlyNewlines <|> pure False
+    subtocs <- getsubtocs stopdescent
+    optional (many tocEL)
+    return (TocHead (num, cont) subtocs)
+    -- wenn erfolgreich dann steigt es immer ein level herab
+    -- nextElm <- case of
+    --   onlyNewLines -> subtocs []
+    --   isLowerLevel -> subtocs []
+    --   ishigherLevel get subtocs <- many tochheads
+    -- subtocs <- getsubtocs start
+    --(lookAhead (try (isLevel start)) <|> try onlyNewlines)
+
+getsubtocs :: Bool -> Parser [Toc]
+getsubtocs False = many (try tochead)
+getsubtocs True = pure []
+
+isLevel start = do
+    optional (many (noneOf "#"))
+    string (replicate start '#')
+    spaces
+    many1 alphaNum
+    return True 
+
+onlyNewlines :: Parser Bool
+onlyNewlines = do 
+    skipMany newline
+    notFollowedBy anyToken
+    return True
+
+tocEL :: Parser Toc
+tocEL = do
+    many (noneOf "#\n") <* char '\n' 
+    return EmptyToc
+
+parseMarkdownTOC :: String -> Either ParseError [Toc]
+parseMarkdownTOC inp = parse (many tochead) "(unknown)" inp
+
+parseTOC2HTML inp = do 
+    res <- parseMarkdownTOC inp
+    let res' = concat $ map show res
+    return res'
+
+tocify :: Markdown -> HTML
+tocify inp = stripEither $ parseTOC2HTML (inp ++ "\n\n")
