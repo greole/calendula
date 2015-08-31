@@ -28,7 +28,8 @@ main = do
            (" - - - ", "<hr />"),
            (" *-*", "<p><em>-</em></p>"), -- continue at example 21
            ("**foo**", "<p><strong>foo</strong></p>"),
-           -- ("**foo**foo*bar*" , "<strong>foo</strong>foo<em>bar</em>"),
+           ("_ _ _ _ a\n\na------\n\n---a---\n\n", "<p>_ _ _ _ a</p><p>a------</p><p>---a---</p>"),
+           (" *-*" , "<p><em>-</em></p>"),
            -- ("*foo*" , "<em>foo</em>"),
            -- ("* foo \n" , "<li>foo </li>"),
            -- ("Stuff" , "Stuff"),
