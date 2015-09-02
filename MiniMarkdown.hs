@@ -87,7 +87,7 @@ upTo n p end = do
 
 headl :: Parser Token
 headl = Head <$> liftA2 (,) numB cont
-    where numB = fmap length (many1 (char '#') <* spaces)
+    where numB = fmap length (many1 (char '#') <* many1 space)
           cont = many (noneOf "\n") <* nl
 
 list :: Parser Token
