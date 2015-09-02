@@ -28,10 +28,15 @@ main = do
            (" - - - ", "<hr />"),
            (" *-*", "<p><em>-</em></p>"), -- continue at example 21
            ("**foo**", "<p><strong>foo</strong></p>"),
-           ("_ _ _ _ a\n\na------\n\n---a---\n\n", "<p>_ _ _ _ a</p><p>a------</p><p>---a---</p>"),
+           ("_ _ _ _ a\n\na------\n\n---a---\n\n",
+                "<p>_ _ _ _ a</p><p>a------</p><p>---a---</p>"),
            (" *-*" , "<p><em>-</em></p>"),
            ("Foo\n***\nbar", "<p>Foo</p>\n<hr />\n<p>bar</p>"), -- hrules can interrupt a paragraph
-           ("# foo\n## foo\n### foo\n#### foo\n##### foo\n###### foo\n", "<h1><a name=\"foo\">foo</a></h1><h2><a name=\"foo\">foo</a></h2><h3><a name=\"foo\">foo</a></h3><h4><a name=\"foo\">foo</a></h4><h5><a name=\"foo\">foo</a></h5><h6><a name=\"foo\">foo</a></h6>"), 
+           ("# foo\n## foo\n### foo\n#### foo\n##### foo\n###### foo\n",
+            "<h1><a name=\"foo\">foo</a></h1><h2><a name=\"foo\">foo</a></h2>\
+            \<h3><a name=\"foo\">foo</a></h3><h4><a name=\"foo\">foo</a></h4>\
+            \<h5><a name=\"foo\">foo</a></h5><h6><a name=\"foo\">foo</a></h6>"),
+           ("#5 bolt\n\n#foobar", "<p>#5 bolt</p><p>#foobar</p>"),
            -- ("*foo*" , "<em>foo</em>"),
            -- ("* foo \n" , "<li>foo </li>"),
            -- ("Stuff" , "Stuff"),
