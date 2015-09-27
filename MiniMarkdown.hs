@@ -1,6 +1,7 @@
 module MiniMarkdown where
 
 {-# LANGUAGE NoMonomorphismRestriction #-}
+
 import Text.ParserCombinators.Parsec (Parser)
 import Text.Parsec
 import Control.Applicative (pure, liftA2, (*>),(<*),(<*>),(<$>))
@@ -28,30 +29,28 @@ data Token = Head (Int, String)
            deriving Show
 
 --instance Show Token where
-htmlshow (Bold x) = wrap "strong" x
-htmlshow (Emph x) = wrap "em" x
-htmlshow (MString x) = x
+htmlshow (Bold x)      = wrap "strong" x
+htmlshow (Emph x)      = wrap "em" x
+htmlshow (MString x)   = x
 htmlshow (Head (l, x)) = wrap ("h" ++ show l) (namedWrap "a" "name" x x)
-htmlshow (Url (l, x)) = href x l
-htmlshow (List x) = wrap "ul" $ wrap "li" $ concat $ map htmlshow x
-htmlshow (ICode x) = wrap "code" x
-htmlshow (BCode x) = wrap "pre" $ wrap "code" $ concat $
+htmlshow (Url (l, x))  = href x l
+htmlshow (List x)      = wrap "ul" $ wrap "li" $ concat $ map htmlshow x
+htmlshow (ICode x)     = wrap "code" x
+htmlshow (BCode x)     = wrap "pre" $ wrap "code" $ concat $
                             intersperse "\n" $ map htmlshow x
-htmlshow (Par xs) = wrap "p" $ concat $ map htmlshow xs
-htmlshow Hrule  = "<hr />"
+htmlshow (Par xs)         = wrap "p" $ concat $ map htmlshow xs
+htmlshow Hrule            = "<hr />"
 -- Empty Elems
-htmlshow Ws = " "
-htmlshow EndPar = ""
-htmlshow Emptym = ""
-htmlshow EmptyLine = ""
-htmlshow InlineNL = " "
-htmlshow LeadingWs = ""
+htmlshow Ws               = " "
+htmlshow EndPar           = ""
+htmlshow Emptym           = ""
+htmlshow EmptyLine        = ""
+htmlshow InlineNL         = " "
+htmlshow LeadingWs        = ""
 htmlshow LeadingEmptyLine = ""
 
 type HTML = String
 type Markdown = String
-
-makeEmpty _ = Emptym
 
 wrap a b = concat ["<",a,">",b,"</",a,">"]
 namedWrap a b c d  = concat ["<", a," ",b,"=\"",c,"\">",d,"</",a,">"]
@@ -70,15 +69,15 @@ parseMarkdownBlocks = many $ choice (map try bParser)
 -- consume whitespaces at beginning of line if less than 3
 wsp :: Parser Token
 wsp = do
-    upTo 3 (char ' ') (oneOf " \t") <|>
-          upTo 2 (char ' ') (oneOf "\t") <|>
-          upTo 1 (char ' ') (oneOf "\t")
+    upTo 3 ws (oneOf " \t") <|>
+          upTo 2 ws (oneOf "\t") <|>
+          upTo 1 ws (oneOf "\t")
     return LeadingWs
 
 lineOfWsp = do
-    many1 (char ' ')
+    many1 ws
     try $ notFollowedBy (noneOf " \t")
-    lookAhead (char '\n')
+    lookAhead nl
     return EmptyLine
 
 upTo n p end = do
@@ -92,15 +91,16 @@ headl = Head <$> liftA2 (,) numB cont
 
 list :: Parser Token
 list = List <$> between open close parseMarkdownInline
-            where open = (oneOf "*-+") <* space
+            where open  = (oneOf "*-+") <* space
                   close = lookAhead $ try endBlock
 
 hrule :: Parser Token
 hrule = rule '*' <|> rule '-' <|> rule '_'
-    where rule x = do
-                count 3 (char x)
-                many (char x) <* (char '\n')
-                return Hrule
+    where rule :: Char -> Parser Token
+          rule x = do
+              count 3 (char x)
+              many (char x) <* nl
+              return Hrule
 
 bcode :: Parser Token
 bcode =  fmap BCode (blockCode <|> blockCode2)
@@ -113,7 +113,7 @@ blockCode2 :: Parser [Token]
 blockCode2 = between open close (many purestring)
             where open = try (string "    ") <|> try (string "\t") -- NOTE how to throw a Failure
                   close = do
-                        try $ char '\n'
+                        try $ nl
                         (notFollowedBy (string "    ") <|> notFollowedBy (string "\t"))
                         return " "
 
@@ -125,57 +125,64 @@ purestring = do
     cnt <- many1Till (noneOf "\n") nl
     return $ MString cnt
 
+par :: Parser Token
 par = Par <$> parseMarkdownInline <* try endBlock
 
-endBlock = do
-    string "\n\n"
-    many (char '\n')
-    return EndPar
+endBlock :: Parser Token
+endBlock = string "\n\n" *> nl *> return EndPar
 
-swl = do
-    string "\n"
-    notFollowedBy $ char ' '
-    return LeadingEmptyLine
+swl :: Parser Token
+swl = nl *> notFollowedBy ws *> return LeadingEmptyLine
 
+anyTillEndBlock :: Parser String
 anyTillEndBlock = anyTill endBlock
+
+anyTill :: Parser Token -> Parser String
 anyTill close = many1Till anyChar $ lookAhead $ try $ close
-optionalEOL = optional (many nl)
-eol = fmap makeEmpty nl
-nl = (char '\n')
+
+-- optEOL = optional (many nl)
+
+eol :: Parser Token
+eol = nl *> pure Emptym
+
+nl :: Parser Char
+nl = char '\n'
+
+ws :: Parser Char
+ws = char ' '
 
 {- Inline Parser -}
 
 parseMarkdownInline :: Parser [Token]
 parseMarkdownInline = many1 (markdownInline <|> mstring)
 
-markdownInline = choice (map try [url, emph, bold, iCode, ws, inlineNL])
+markdownInline = choice (map try [url, emph, bold, iCode, ws', inlineNL])
 
-ws :: Parser Token
-ws = do
+ws' :: Parser Token
+ws' = do
     try $ many1 $ oneOf " \t"
     lookAhead $ try $ noneOf " \t"
     return Ws
 
-inlineNL = do
-    char '\n'
-    notFollowedBy (char '\n')
-    return InlineNL
+inlineNL :: Parser Token
+inlineNL = nl *> notFollowedBy nl *> return InlineNL
 
 url :: Parser Token
 url = Url <$> liftA2 (,) name url
-        where  name = between open close $ delChar "]"
-                    where open  = char '[' <* lookAhead (noneOf " *")
-                          close = char ']'
-               url = between open close $ delChar ")"
-                    where open  = char '(' <* lookAhead (noneOf " *")
-                          close = char ')'
+    where name = between open close $ delChar "]"
+               where open  = char '[' <* lookAhead (noneOf " *")
+                     close = char ']'
+          url = between open close $ delChar ")"
+               where open  = char '(' <* lookAhead (noneOf " *")
+                     close = char ')'
 
+delChar :: String -> Parser String
 delChar x = many (noneOf ("\n" ++ x))
 
 emph :: Parser Token
 emph = Emph <$> (between open del $ delChar "*")
         where open = del <* lookAhead (noneOf " *")
-              del = char '*'
+              del  = char '*'
 
 iCode = ICode <$> (between del del $ delChar "`")
          where del = char '`'
