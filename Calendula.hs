@@ -33,10 +33,8 @@ mergeMarkdown :: (Int -> Markdown -> HTML) ->  (Markdown -> Markdown) -> [Int] -
 mergeMarkdown p f l x = unlines $ zipWith p l (map f x)
 
 filterMarkdownHeader :: Markdown -> Markdown
-filterMarkdownHeader a = unlines $ dropWhile isHeader (lines a)
-               where isHeader (x:xs)
-                        | x == '%' = True
-                        | otherwise = False
+filterMarkdownHeader = unlines . dropWhile isHeader . lines
+               where isHeader (x:xs) = x == '%'
                      isHeader _ = False
 
 concatFile :: (Int -> String -> String) -> FilePath -> FilePath -> IO ()
